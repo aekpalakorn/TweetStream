@@ -9,3 +9,9 @@
 hash.text
 sketch*
 *log*
+bin/*
+.metadata/*
+
+# Eclipse files
+.classpath
+.project
