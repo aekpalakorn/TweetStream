@@ -1,9 +1,13 @@
 package linegroup3.tweetstream.rt2;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -31,7 +35,6 @@ import linegroup3.tweetstream.rt2.sket.OutputSketch;
 import linegroup3.tweetstream.rt2.sket.Pair;
 import linegroup3.tweetstream.rt2.sket.Sketch;
 
-
 public class RTProcess2 {
 	static final long oneDayLong = 24 * 60 * 60 * 1000; // (ms)
 	
@@ -41,75 +44,60 @@ public class RTProcess2 {
 
 	static private Connection conn = null;
 	
-	static {
-		try {
-			conn = DriverManager
-					.getConnection("jdbc:mysql://10.4.8.16/tweetstream?"
-							+ "user=root&password=123583");
-
-		} catch (SQLException ex) {
-			// handle any errors
-			System.out.println("SQLException: " + ex.getMessage());
-			System.out.println("SQLState: " + ex.getSQLState());
-			System.out.println("VendorError: " + ex.getErrorCode());
-
-			conn = null;
-
-		}
-	}
+	//Aek: Replacing MySQL with REST API
+	static private HttpURLConnection httpConn = null;
 	
-	/*
-	static private Connection connForLog = null;
+	// Aek: Disabling MySQL
+//	static {
+//		try {
+//			conn = DriverManager
+//					.getConnection("jdbc:mysql://10.4.8.16/tweetstream?"
+//							+ "user=root&password=123583");
+//
+//		} catch (SQLException ex) {
+//			// handle any errors
+//			System.out.println("SQLException: " + ex.getMessage());
+//			System.out.println("SQLState: " + ex.getSQLState());
+//			System.out.println("VendorError: " + ex.getErrorCode());
+//
+//			conn = null;
+//
+//		}
+//	}
 	
-	static {
-		try {
-			connForLog = DriverManager
-					.getConnection("jdbc:mysql://10.4.8.16/tweetstream?"
-							+ "user=root&password=123583");
-
-		} catch (SQLException ex) {
-			// handle any errors
-			System.out.println("SQLException: " + ex.getMessage());
-			System.out.println("SQLState: " + ex.getSQLState());
-			System.out.println("VendorError: " + ex.getErrorCode());
-
-			connForLog = null;
-
-		}
-	}*/
 	static private BufferedWriter speedlog = null;
 	static private BufferedWriter dspeedlog = null;
 	
 	static final String OutputPath = "./data";
 		
-	
-	private static void resetConnection(){
-		try {
-			conn.close();
-		} catch (SQLException ex) {
-			// handle any errors
-			System.out.println("SQLException: " + ex.getMessage());
-			System.out.println("SQLState: " + ex.getSQLState());
-			System.out.println("VendorError: " + ex.getErrorCode());
-
-			conn = null;
-
-		}
-		try {
-			conn = DriverManager
-					.getConnection("jdbc:mysql://10.4.8.16/tweetstream?"
-							+ "user=root&password=123583");
-
-		} catch (SQLException ex) {
-			// handle any errors
-			System.out.println("SQLException: " + ex.getMessage());
-			System.out.println("SQLState: " + ex.getSQLState());
-			System.out.println("VendorError: " + ex.getErrorCode());
-
-			conn = null;
-
-		}
-	}
+	//Aek: Disabling MySQL
+//	private static void resetConnection(){
+//		try {
+//			conn.close();
+//		} catch (SQLException ex) {
+//			// handle any errors
+//			System.out.println("SQLException: " + ex.getMessage());
+//			System.out.println("SQLState: " + ex.getSQLState());
+//			System.out.println("VendorError: " + ex.getErrorCode());
+//
+//			conn = null;
+//
+//		}
+//		try {
+//			conn = DriverManager
+//					.getConnection("jdbc:mysql://10.4.8.16/tweetstream?"
+//							+ "user=root&password=123583");
+//
+//		} catch (SQLException ex) {
+//			// handle any errors
+//			System.out.println("SQLException: " + ex.getMessage());
+//			System.out.println("SQLState: " + ex.getSQLState());
+//			System.out.println("VendorError: " + ex.getErrorCode());
+//
+//			conn = null;
+//
+//		}
+//	}
 	
 	private Timestamp DETECT_T = null;
 	private static final double THRESHOLD_D_V = 1.0;
@@ -122,64 +110,114 @@ public class RTProcess2 {
 	private int LAG = 5; // Largest lag :  5 minutes
 	private int CYCLE = 24*60;
 	private int MAX_QUEUE_SIZE = CYCLE + LAG; // unit: minute (one day)
-	private Sketch[] sketchQueue = new Sketch[MAX_QUEUE_SIZE];
+
+	// Aek: Disable sketchQueue for testing; set it to null
+//		private Sketch[] sketchQueue = new Sketch[MAX_QUEUE_SIZE];
+	private Sketch[] sketchQueue = null;
+			
 	private int head = 0;
 	private int tail = 0;
 	
 	private ActiveTerm2 activeTerms = new ActiveTerm2();
 	
-	public RTProcess2(){		
-		for(int i = 0; i < MAX_QUEUE_SIZE; i ++){
-			sketchQueue[i] = new Sketch();
-		}
+	public RTProcess2(){
+		// Aek: For testing and preventing the out-of-memory exception, disabling sketchQueue
+//		for(int i = 0; i < MAX_QUEUE_SIZE; i ++){
+//			sketchQueue[i] = new Sketch();
+//		}
 	}
 	
 	private Sketch currentSketch = null;
 	
+	/**
+	 * Aek: Comment
+	 * Read the data from tokenizedstream table and update the sketch
+	 * tokenizedstream's schema:
+	 * - t = timestamp (Y-m-d H:m:s)
+	 * - status_ID
+	 * - user_ID
+	 * - tweet (["foo","bar",...])
+	 * 
+	 * Testing:
+	 * - Disabling sketchQueue and any variables or methods depending on it
+	 * - Disabling MySQL operations
+	 * - Disabling speedlog and dspeedlog since they depend on sketchQueue
+	 * 
+	 * Refactoring:
+	 * - For a continuous real-time monitoring, no need to set the 'start' and 'end' timestamps
+	 */
 	public void runTime(Timestamp start, Timestamp end, Timestamp dt) throws IOException{	
 		DETECT_T= dt;
-		StopWords.initialize();
 		
-		speedlog = new BufferedWriter(new FileWriter(OutputPath + "/speedlog.txt"));
-		dspeedlog = new BufferedWriter(new FileWriter(OutputPath + "/dspeedlog.txt"));
+		// Aek: Disabling for testing
+//		StopWords.initialize();
+		
+		// Aek: disabling loggers for testing
+//		speedlog = new BufferedWriter(new FileWriter(OutputPath + "/speedlog.txt"));
+//		dspeedlog = new BufferedWriter(new FileWriter(OutputPath + "/dspeedlog.txt"));
 		
 		Timestamp one_min_after_lastTime = new Timestamp(0);
-
 		Timestamp next = new Timestamp(start.getTime()+oneDayLong);
-				
-		currentSketch = new Sketch();	
+		
+		// Aek: disabling currentSketch for testing
+//		currentSketch = new Sketch();	
 		
 		final Semaphore taskFinished = new Semaphore(0);
 
+		// Aek: Make a REST API connection here
+		URL url = null;
+		final String baseURL = "http://research.larc.smu.edu.sg:8080/PalanteerDevApi/rest/v1/";
+		final String resource = "tweets/search"; 
+		String startStr = "2013-02-22T00:00:00Z";
+		String endStr = "2013-02-22T00:01:00Z";
+		int pageNo = 1;
+		String urlStr = baseURL + resource + "?q=*&start="+startStr+"&end="+endStr+"&page="+pageNo;
+		url = new URL(urlStr);
+		httpConn = (HttpURLConnection) url.openConnection();
+		
+		if(httpConn.getResponseCode() != 200){
+			throw new IOException(httpConn.getResponseMessage());
+		}
+		
+		BufferedReader br = new BufferedReader(new InputStreamReader(httpConn.getInputStream()));
+		StringBuilder resp = new StringBuilder();
+		String line = null;
+		
+		while ((line = br.readLine()) != null){
+			resp.append(line);
+		}
+		
+		System.out.println(resp.toString().length());
+		br.close();
+		httpConn.disconnect();
+		
+		
+		/*
+		 * Aek: Comment on what the original code does
+		 * Beginning with the 'start' timestamp, retrieve a set of tweets published in one-day window (start + 24 hours)
+		 * and terminate the loop when we reach the 'end' timestamp
+		 */
 		while(start.before(end)){
 			System.out.println(new Timestamp(System.currentTimeMillis()) + "\tProcessing : " + start);  // print info
-			
 			Statement stmt = null;
 			ResultSet rs = null;
+			
 			try {
 				stmt = conn.createStatement();
 				String sqlTxt = "select *  from tokenizedstream where t >= \'" + start + "\' and t < \'" + next +"\' order by t";
+				
 				if (stmt.execute(sqlTxt)) {
-					
 					rs = stmt.getResultSet();
+					
 					while (rs.next()) {
 						/// debug
 						///long debug_T = System.currentTimeMillis();
 						/////////////////////////////////
 												
 						final Timestamp t = rs.getTimestamp("t");
-						/*
 						String tweet = rs.getString("tweet");
-						
-						tweet = decode(tweet);
-						tweet = downcase(tweet);
-						List<String> terms = tokenize(tweet);
-						*/
-						String tweet = rs.getString("tweet");
-						
 						List<String> terms = new LinkedList<String>();
-						
-						
+												
 						try {
 							JSONArray array = new JSONArray(tweet);
 							for (int k = 0; k < array.length(); k++) {
@@ -190,7 +228,6 @@ public class RTProcess2 {
 							continue;
 						}
 
-						
 						List<String> finalTerms = new LinkedList<String>();
 						for(String term : terms){
 							if(!StopWords.isStopWord(term)){
@@ -200,43 +237,6 @@ public class RTProcess2 {
 						}
 						
 						////// counting
-						/*
-						double l = 0; 
-						ArrayList<TreeMap<Integer, Integer>> counter = new ArrayList<TreeMap<Integer, Integer>>(H);
-						for(int h = 0; h < H; h ++){
-							counter.add(new TreeMap<Integer, Integer>());
-						}
-						String[] res = tweet.split(",");
-						for(String term : res){
-							if(term.length() >= 1){
-								int id = Integer.parseInt(term);
-								
-								if(StopWords.isStopWord(id))	continue;
-								
-								activeTerms.active(id, t);
-								
-								for(int h = 0; h < H; h ++){
-									int bucket = HashFamily.hash(h, id);
-									
-									Integer count = counter.get(h).get(bucket);
-									if(count == null){
-										counter.get(h).put(bucket, 1);
-									}else{
-										counter.get(h).put(bucket, count + 1);
-									}
-								}
-								
-								l ++;
-							}
-						}
-						
-						if(l <= 1){
-							/////////////////////////////// for debug
-							//System.out.print("L i s less than 2!!!!!!!");
-							//System.out.println(rs.getString("status_ID"));
-							continue;
-						}*/
-						
 						double l = 0; 
 						ArrayList<TreeMap<Integer, Integer>> counter = new ArrayList<TreeMap<Integer, Integer>>(H);
 						for(int h = 0; h < H; h ++){
@@ -264,15 +264,11 @@ public class RTProcess2 {
 						if(l <= 1){
 							continue;
 						}
-						
 						////////////////////////////////////////////////
-						
 						double ds = 0;
 						////// for zero order
-						
 						ds = 1;
-						currentSketch.zeroOrderPulse(t, ds);
-
+//						currentSketch.zeroOrderPulse(t, ds);
 
 						////// for first order
 						for (int h = 0; h < H; h++) {
@@ -281,36 +277,20 @@ public class RTProcess2 {
 							final double f_l = l;
 							
 							pool.execute(new Runnable(){
-
 								@Override
 								public void run() {
 									for (Map.Entry<Integer, Integer> entry : f_counter
 											.get(f_h).entrySet()) {
 										int bucket = entry.getKey();
 										int count = entry.getValue();
-										
 										double ds = count / f_l;
-										
-										currentSketch.firstOrderPulse(t, ds, f_h, bucket);								
+//										currentSketch.firstOrderPulse(t, ds, f_h, bucket);								
 									}
 									
 									taskFinished.release();
 								}
-								
 							});
-							/*
-							for (Map.Entry<Integer, Integer> entry : counter
-									.get(h).entrySet()) {
-								int bucket = entry.getKey();
-								int count = entry.getValue();
-
-								ds = count / l;
-								
-								currentSketch.firstOrderPulse(t, ds, h, bucket);								
-							}
-							*/
 						}
-					
 						
 						////// for second order
 						for (int h = 0; h < H; h++) {
@@ -319,7 +299,6 @@ public class RTProcess2 {
 							final double f_l = l;
 							
 							pool.execute(new Runnable(){
-
 								@Override
 								public void run() {
 									for (Map.Entry<Integer, Integer> entry_i : f_counter.get(f_h).entrySet()) {
@@ -329,7 +308,6 @@ public class RTProcess2 {
 										for(Map.Entry<Integer, Integer> entry_j : f_counter.get(f_h).entrySet()) {
 											int bucket_j = entry_j.getKey();
 											int count_j = entry_j.getValue();
-											
 											double ds = 0;
 											
 											if(bucket_i == bucket_j){
@@ -337,41 +315,15 @@ public class RTProcess2 {
 											}else{
 												ds = count_i*count_j;
 											}
+											
 											ds /= f_l*(f_l-1);
-											
-											currentSketch.secondOrderPulse(t, ds, f_h, bucket_i, bucket_j);
-											
+//											currentSketch.secondOrderPulse(t, ds, f_h, bucket_i, bucket_j);
 										}
-										
 									}
 									
 									taskFinished.release();
 								}
-								
 							});
-							
-							/*
-							for (Map.Entry<Integer, Integer> entry_i : counter.get(h).entrySet()) {
-								int bucket_i = entry_i.getKey();
-								int count_i = entry_i.getValue();
-								
-								for(Map.Entry<Integer, Integer> entry_j : counter.get(h).entrySet()) {
-									int bucket_j = entry_j.getKey();
-									int count_j = entry_j.getValue();
-																		
-									if(bucket_i == bucket_j){
-										ds = count_i*(count_i-1);		
-									}else{
-										ds = count_i*count_j;
-									}
-									ds /= l*(l-1);
-									
-									currentSketch.secondOrderPulse(t,ds, h, bucket_i, bucket_j);
-									
-								}
-								
-							}
-							*/
 						}	
 						
 						/////////// synchronize
@@ -382,85 +334,75 @@ public class RTProcess2 {
 						}
 						
 						////////////////// change observing time //////////////
-						currentSketch.observe(t);
+//						currentSketch.observe(t);
 						
 						///////// write speed
-						final Pair speed = currentSketch.zeroOrder.get(t);
-						speedLogWrite(t, speed.v, speed.a);
+//						final Pair speed = currentSketch.zeroOrder.get(t);
+//						speedLogWrite(t, speed.v, speed.a);
 
-						
 						/////// for difference
 						if(t.after(DETECT_T))
 						{
 							Timestamp oneday_before_t = new Timestamp(t.getTime() - CYCLE * 60 * 1000);
 					
-							
 							int index = head;
-							Sketch sketch2 = sketchQueue[index % MAX_QUEUE_SIZE];
-							while(sketch2.getTime().before(oneday_before_t)){
-								index ++;
-								sketch2 = sketchQueue[index % MAX_QUEUE_SIZE];
-							}
+//							Sketch sketch2 = sketchQueue[index % MAX_QUEUE_SIZE];
+//							while(sketch2.getTime().before(oneday_before_t)){
+//								index ++;
+//								sketch2 = sketchQueue[index % MAX_QUEUE_SIZE];
+//							}
 							
-							Sketch sketch1 = sketchQueue[(index - 1) % MAX_QUEUE_SIZE];
+//							Sketch sketch1 = sketchQueue[(index - 1) % MAX_QUEUE_SIZE];
 							
 							Estimator estimator;
 							try {
-								estimator = new Estimator(sketch1, sketch2, oneday_before_t);
+//								estimator = new Estimator(sketch1, sketch2, oneday_before_t);
 								
-								final Pair pair = estimator.zeroOrderDiff(currentSketch);
-								dspeedLogWrite(t, pair.v, pair.a);
+//								final Pair pair = estimator.zeroOrderDiff(currentSketch);
+//								dspeedLogWrite(t, pair.v, pair.a);
 								
-								if(t.after(one_min_after_lastTime) && pair.a >= THRESHOLD_D_A && pair.v >= THRESHOLD_D_V){
-									saveSketch(currentSketch);
-									one_min_after_lastTime = new Timestamp(t.getTime() + 60000);
-								}
+//								if(t.after(one_min_after_lastTime) && pair.a >= THRESHOLD_D_A && pair.v >= THRESHOLD_D_V){
+//									saveSketch(currentSketch);
+//									one_min_after_lastTime = new Timestamp(t.getTime() + 60000);
+//								}
 							} catch (Exception e) {
 								e.printStackTrace();
 							}
-							
 						}
-						
 						
 						/////// cache snapshot
 						final long oneMinute = 60 * 1000;
 						
 						Timestamp lastone = null;
 						if(head == tail){
-							currentSketch.copy(sketchQueue[tail]);
+//							currentSketch.copy(sketchQueue[tail]);
 							tail ++;
 						}else{
 							int index = (tail - 1) % MAX_QUEUE_SIZE;
-							Sketch lastSketch = sketchQueue[index];
-							lastone = lastSketch.getTime();
+//							Sketch lastSketch = sketchQueue[index];
+//							lastone = lastSketch.getTime();
 							if(t.getTime() == lastone.getTime()){
-								currentSketch.copy(sketchQueue[index]);
+//								currentSketch.copy(sketchQueue[index]);
 							}
 							if(t.getTime() - lastone.getTime() >= oneMinute){
 								if(tail - head == MAX_QUEUE_SIZE){
 									head ++;
 								}
-								currentSketch.copy(sketchQueue[tail % MAX_QUEUE_SIZE]);
+//								currentSketch.copy(sketchQueue[tail % MAX_QUEUE_SIZE]);
 								tail ++;
 							}
 						}
-						
+
 						/// debug
 						///System.out.println(System.currentTimeMillis() - debug_T);
 						///////////
-						
-					}
-	
-				}
-				
-				
-
+					} // Aek: End for each rs.next()
+				} // Aek: End if stmt.execute(sqlTxt)
 			} catch (SQLException ex) {
 				// handle any errors
 				System.out.println("SQLException: " + ex.getMessage());
 				System.out.println("SQLState: " + ex.getSQLState());
 				System.out.println("VendorError: " + ex.getErrorCode());
-
 			} finally {
 				// it is a good idea to release
 				// resources in a finally{} block
@@ -485,17 +427,16 @@ public class RTProcess2 {
 			start = next;
 			next = new Timestamp(start.getTime()+oneDayLong);
 			
-			resetConnection();
+			// Aek: Disabling MySQL
+//			resetConnection();
 		}
 		
-		speedlog.close();
-		dspeedlog.close();
-		
+//		speedlog.close();
+//		dspeedlog.close();
 	}
 	
 	
 	private void checkFirstOrder(){
-		//Sketch sketch = sketchQueue[(tail-1) % MAX_QUEUE_SIZE];
 		Sketch sketch = currentSketch;
 		Timestamp currentTime = sketch.getTime();
 		System.out.println("Checking..." + currentTime);
